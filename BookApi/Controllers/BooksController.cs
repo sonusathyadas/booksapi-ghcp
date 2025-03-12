@@ -198,7 +198,7 @@ namespace BookApi.Controllers
         }
 
         [HttpGet("author")]
-        public async Task<ActionResult<IEnumerable<Book>>> GetBooksByAuthorAsync(string author)
+        public async Task<ActionResult<IEnumerable<Book>>> GetBooksByAuthorAsync(string author)        
         {
             try
             {
@@ -214,6 +214,28 @@ namespace BookApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Unexpected error fetching books by author {author}");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        // Create a API to return the list of books based on the category
+        [HttpGet("category")]
+        public async Task<ActionResult<IEnumerable<Book>>> GetBooksByCategoryAsync(string category)
+        {
+            try
+            {
+                return await _context.Books
+                    .Where(b => b.Category == category)
+                    .ToListAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, $"Database update error fetching books by category {category}");
+                return StatusCode(500, "Internal server error");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Unexpected error fetching books by category {category}");
                 return StatusCode(500, "Internal server error");
             }
         }
