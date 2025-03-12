@@ -1,4 +1,5 @@
 using BookApi.Data;
+using BookApi.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -42,6 +43,9 @@ public class Startup
                 ValidateAudience = false
             };
         });
+
+        // Register the repository service
+        services.AddScoped<IBookRepository, BookRepository>();
     }
 
     /// <summary>

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using System;
 using Microsoft.AspNetCore.Authorization;
+using BookApi.Repositories;
 
 namespace BookApi.Controllers
 {
@@ -16,12 +17,12 @@ namespace BookApi.Controllers
     [Authorize]
     public class BooksController : ControllerBase
     {
-        private readonly BookContext _context;
+        private readonly IBookRepository _bookRepository;
         private readonly ILogger<BooksController> _logger;
 
-        public BooksController(BookContext context, ILogger<BooksController> logger)
+        public BooksController(IBookRepository bookRepository, ILogger<BooksController> logger)
         {
-            _context = context;
+            _bookRepository = bookRepository;
             _logger = logger;
         }
 
@@ -30,7 +31,7 @@ namespace BookApi.Controllers
         {
             try
             {
-                return await _context.Books.ToListAsync();
+                return Ok(await _bookRepository.GetBooksAsync());
             }
             catch (DbUpdateException ex)
             {
@@ -49,7 +50,7 @@ namespace BookApi.Controllers
         {
             try
             {
-                var book = await _context.Books.FindAsync(id);
+                var book = await _bookRepository.GetBookByIdAsync(id);
 
                 if (book == null)
                 {
@@ -80,9 +81,7 @@ namespace BookApi.Controllers
 
             try
             {
-                _context.Books.Add(book);
-                await _context.SaveChangesAsync();
-
+                await _bookRepository.CreateBookAsync(book);
                 return CreatedAtAction(nameof(GetBookById), new { id = book.Id }, book);
             }
             catch (DbUpdateException ex)
@@ -110,11 +109,9 @@ namespace BookApi.Controllers
                 return BadRequest(ModelState);
             }
 
-            _context.Entry(book).State = EntityState.Modified;
-
             try
             {
-                await _context.SaveChangesAsync();
+                await _bookRepository.UpdateBookAsync(book);
             }
             catch (DbUpdateConcurrencyException ex)
             {
@@ -147,15 +144,13 @@ namespace BookApi.Controllers
         {
             try
             {
-                var book = await _context.Books.FindAsync(id);
+                var book = await _bookRepository.GetBookByIdAsync(id);
                 if (book == null)
                 {
                     return NotFound();
                 }
 
-                _context.Books.Remove(book);
-                await _context.SaveChangesAsync();
-
+                await _bookRepository.DeleteBookAsync(book);
                 return NoContent();
             }
             catch (DbUpdateException ex)
@@ -172,7 +167,7 @@ namespace BookApi.Controllers
 
         private bool BookExists(int id)
         {
-            return _context.Books.Any(e => e.Id == id);
+            return _bookRepository.BookExists(id);
         }
 
         [HttpGet("page")]
@@ -180,10 +175,7 @@ namespace BookApi.Controllers
         {
             try
             {
-                return await _context.Books
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToListAsync();
+                return Ok(await _bookRepository.GetBooksByPageAsync(page, pageSize));
             }
             catch (DbUpdateException ex)
             {
@@ -198,13 +190,11 @@ namespace BookApi.Controllers
         }
 
         [HttpGet("author")]
-        public async Task<ActionResult<IEnumerable<Book>>> GetBooksByAuthorAsync(string author)        
+        public async Task<ActionResult<IEnumerable<Book>>> GetBooksByAuthorAsync(string author)
         {
             try
             {
-                return await _context.Books
-                    .Where(b => b.Author == author)
-                    .ToListAsync();
+                return Ok(await _bookRepository.GetBooksByAuthorAsync(author));
             }
             catch (DbUpdateException ex)
             {
@@ -218,15 +208,12 @@ namespace BookApi.Controllers
             }
         }
 
-        // Create a API to return the list of books based on the category
         [HttpGet("category")]
         public async Task<ActionResult<IEnumerable<Book>>> GetBooksByCategoryAsync(string category)
         {
             try
             {
-                return await _context.Books
-                    .Where(b => b.Category == category)
-                    .ToListAsync();
+                return Ok(await _bookRepository.GetBooksByCategoryAsync(category));
             }
             catch (DbUpdateException ex)
             {
