@@ -1,20 +1,19 @@
 using NUnit.Framework;
 using Moq;
-using Microsoft.EntityFrameworkCore;
 using BookApi.Controllers;
-using BookApi.Data;
 using BookApi.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using BookApi.Repositories;
+using Microsoft.Extensions.Logging;
 
 namespace BookApi.Tests
 {
     public class BooksControllerTests
     {
-        private Mock<BookContext> _mockContext;
-        private Mock<DbSet<Book>> _mockSet;
+        private Mock<IBookRepository> _mockRepository;
         private BooksController _controller;
         private List<Book> _books;
 
@@ -27,16 +26,17 @@ namespace BookApi.Tests
                 new Book { Id = 2, Title = "Book 2", Author = "Author 2" }
             };
 
-            _mockSet = new Mock<DbSet<Book>>();
-            _mockSet.As<IQueryable<Book>>().Setup(m => m.Provider).Returns(_books.AsQueryable().Provider);
-            _mockSet.As<IQueryable<Book>>().Setup(m => m.Expression).Returns(_books.AsQueryable().Expression);
-            _mockSet.As<IQueryable<Book>>().Setup(m => m.ElementType).Returns(_books.AsQueryable().ElementType);
-            _mockSet.As<IQueryable<Book>>().Setup(m => m.GetEnumerator()).Returns(_books.AsQueryable().GetEnumerator());
+            _mockRepository = new Mock<IBookRepository>();
+            _mockRepository.Setup(repo => repo.GetBooksAsync()).ReturnsAsync(_books);
+            _mockRepository.Setup(repo => repo.GetBookByIdAsync(It.IsAny<int>())).ReturnsAsync((int id) => _books.FirstOrDefault(b => b.Id == id));
+            _mockRepository.Setup(repo => repo.CreateBookAsync(It.IsAny<Book>())).Callback<Book>(b => _books.Add(b)).Returns(Task.CompletedTask);
+            _mockRepository.Setup(repo => repo.UpdateBookAsync(It.IsAny<Book>())).Returns(Task.CompletedTask);
+            _mockRepository.Setup(repo => repo.DeleteBookAsync(It.IsAny<Book>())).Callback<Book>(b => _books.Remove(b)).Returns(Task.CompletedTask);
+            _mockRepository.Setup(repo => repo.GetBooksByPageAsync(It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync((int page, int pageSize) => _books.Skip((page - 1) * pageSize).Take(pageSize).ToList());
+            _mockRepository.Setup(repo => repo.GetBooksByAuthorAsync(It.IsAny<string>())).ReturnsAsync((string author) => _books.Where(b => b.Author == author).ToList());
+            _mockRepository.Setup(repo => repo.BookExists(It.IsAny<int>())).Returns((int id) => _books.Any(b => b.Id == id));
 
-            _mockContext = new Mock<BookContext>();
-            _mockContext.Setup(c => c.Books).Returns(_mockSet.Object);
-
-            _controller = new BooksController(_mockContext.Object);
+            _controller = new BooksController(_mockRepository.Object, Mock.Of<ILogger<BooksController>>());
         }
 
         [Test]
@@ -78,8 +78,7 @@ namespace BookApi.Tests
             var book = createdAtActionResult.Value as Book;
 
             Assert.That(book.Id, Is.EqualTo(3));
-            _mockSet.Verify(m => m.Add(It.IsAny<Book>()), Times.Once());
-            _mockContext.Verify(m => m.SaveChangesAsync(default), Times.Once());
+            _mockRepository.Verify(m => m.CreateBookAsync(It.IsAny<Book>()), Times.Once());
         }
 
         [Test]
@@ -91,7 +90,7 @@ namespace BookApi.Tests
 
             Assert.That(noContentResult, Is.Not.Null);
             Assert.That(noContentResult.StatusCode, Is.EqualTo(204));
-            _mockContext.Verify(m => m.SaveChangesAsync(default), Times.Once());
+            _mockRepository.Verify(m => m.UpdateBookAsync(It.IsAny<Book>()), Times.Once());
         }
 
         // [Test]
@@ -100,7 +99,7 @@ namespace BookApi.Tests
         //     var updatedBook = new Book { Id = 2, Title = "Updated Book 2", Author = "Updated Author 2" };
         //     var result = await _controller.UpdateBook(1, updatedBook);
 
-        //     Assert.IsInstanceOf<BadRequestResult>(result);
+        //     Assert.IsInstanceOfType(result, typeof(BadRequestResult));
         // }
 
         // [Test]
@@ -109,8 +108,7 @@ namespace BookApi.Tests
         //     var result = await _controller.DeleteBook(1);
 
         //     Assert.IsInstanceOf<NoContentResult>(result);
-        //     _mockSet.Verify(m => m.Remove(It.IsAny<Book>()), Times.Once());
-        //     _mockContext.Verify(m => m.SaveChangesAsync(default), Times.Once());
+        //     _mockRepository.Verify(m => m.DeleteBookAsync(It.IsAny<Book>()), Times.Once());
         // }
 
         // [Test]
@@ -135,6 +133,16 @@ namespace BookApi.Tests
         public async Task GetBooksByAuthorAsync_ReturnsBooksByAuthor()
         {
             var result = await _controller.GetBooksByAuthorAsync("Author 1");
+            var okResult = result.Result as OkObjectResult;
+            var books = okResult.Value as List<Book>;
+
+            Assert.That(books.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task GetBooksByCategoryAsync_ReturnsBooksByCategory()
+        {
+            var result = await _controller.GetBooksByCategoryAsync("Category 1");
             var okResult = result.Result as OkObjectResult;
             var books = okResult.Value as List<Book>;
 
